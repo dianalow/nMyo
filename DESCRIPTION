@@ -1,0 +1,26 @@
+Package: nMyo
+Type: Package
+Title: nMyo
+Version: 1.0.6
+Date: 2020-05-20
+Authors@R: c(person("Efthymios", "Motakis", email= "", role = c("aut")), 
+    person("Diana", "Low",  email = "lowdiana@gmail.com", role = c("cre")))
+Maintainer: Diana LOW <lowdiana@gmail.com>
+Description: an R shiny applet to visualise the scRNA-seq expression profiles of mouse cardiac non-myocytes
+License: GPL-2
+Encoding: UTF-8
+Collate : readData.R MarkerQuery.R ResultsGenerator.R helper.R
+        helpers.R server.R ui.R
+Depends: R (>= 3.6.0)
+Imports: stringdist, data.table, stringr, dplyr, RColorBrewer, viridis,
+        viridisLite, plotly, ggplot2, ggpubr, plyr, scales,
+        htmlwidgets, shiny, shinydashboard, shinyjs, methods, DT,
+        shinyBS
+LazyData: true
+RoxygenNote: 7.1.0
+NeedsCompilation: no
+Packaged: 2020-05-13 12:40:40 UTC; dianalow
+Author: Efthymios Motakis [aut],
+  Diana Low [cre]
+Suggests: knitr, rmarkdown
+VignetteBuilder: knitr
