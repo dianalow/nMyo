@@ -44,7 +44,7 @@ doScatterDR<-function(Data,
                     interactive=interactive)
 
     gg<-"CT"
-    if(highlight.by!="CellType"){
+    if(highlight.by=="CellType:Condition" | highlight.by=="Condition"){
         gg<-"CO"
     }
     # save the plot
@@ -112,7 +112,7 @@ doViolin<-function(Data,
                     interactive=interactive)
 
     gg<-"CT"
-    if(grouping2.by=="Condition"){
+    if(!is.null(grouping2.by)){
         gg<-"CO"
     }
     # save the plot
@@ -215,6 +215,7 @@ doMA<-function(Data,
 
  return(res)
 }
+
 
 
 

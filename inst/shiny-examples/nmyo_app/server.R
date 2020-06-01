@@ -3,7 +3,11 @@ options(shiny.maxRequestSize=30*1024^2)
 shinyServer(function(input, output,session) {
 
   #### Auto stop app when browser is closed ####
-  session$onSessionEnded(stopApp)
+  session$onSessionEnded(function() {
+    current_wd<-thedata$Output_Folder
+    unlink(current_wd, recursive = TRUE)
+    stopApp()
+  })
 
   # #### Libraries & functions ####
   library(ggplot2)
@@ -179,9 +183,9 @@ shinyServer(function(input, output,session) {
            "t-SNE"={
 
              if(input$scatterCheckbox==TRUE){
-               scattercheck="CellType"
+               scattercheck="CellType:Condition"
              } else {
-               scattercheck=NULL
+               scattercheck="CellType"
              }
                ddata<-doScatterDR(Data=genenameselected,
                                   highlight.by=scattercheck,

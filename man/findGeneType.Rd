@@ -4,12 +4,14 @@
 \alias{findGeneType}
 \title{Find the marker of interest in the data}
 \usage{
-findGeneType(templ, genes, multiple = FALSE)
+findGeneType(templ, genes, correction = FALSE, multiple = FALSE)
 }
 \arguments{
 \item{templ}{matrix. It contains the marker annotations.}
 
 \item{genes}{character. The IDs of the markers of interest.}
+
+\item{correction}{logical. Whether the gene names will be automatically edited to a format that allows a case-insensitive marker search. Default is FALSE}
 
 \item{multiple}{logical. Whether the temp contains repeats of the same gene name. Default is FALSE.}
 }

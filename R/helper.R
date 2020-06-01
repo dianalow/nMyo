@@ -50,7 +50,7 @@ firstStop<-function(Counts_file,Design_file){
 #' Read the required data files
 #'
 #' Helper function
-#' @param data_file character. The location of the RDS data file containing the normalised and corrected counts (CorrCounts), the design table (DesignTable) and the differential expressin analysis (DEs).
+#' @param data_file character. The data file containing the normalised and corrected counts (CorrCounts), the design table (DesignTable) and the differential expressin analysis (DEs).
 #' @keywords RequiredDataReader
 #' @return A list of data
 #' @import data.table stringr
@@ -379,40 +379,53 @@ GeneNames<-function(data,symbol=":",what="Name"){
 #' Helper function
 #' @param templ matrix. It contains the marker annotations.
 #' @param genes character. The IDs of the markers of interest.
+#' @param correction logical. Whether the gene names will be automatically edited to a format that allows a case-insensitive marker search. Default is FALSE
 #' @param multiple logical. Whether the temp contains repeats of the same gene name. Default is FALSE.
 #' @keywords findGeneType
 #' @return A vector of indices
 #'
-findGeneType<-function(templ,genes,multiple=FALSE){
-  if(!multiple){
-    mm<-matrix(0,4,length(genes))
-    for(i in 1:3){
-      mm[i,]<-match(tolower(genes),tolower(as.character(templ[,i])),nomatch=0)
+findGeneType<-function(templ,genes,correction=FALSE,multiple=FALSE){
+
+    if(length(grep("ENSMUSG",toupper(genes)))==0){
+        if(correction){
+            s <- strsplit(tolower(genes), " ")[[1]]
+            genes<-paste(toupper(substring(s, 1,1)), substring(s, 2),sep="", collapse=" ")
+        }
+    } else {
+        if(correction){
+            genes<-unlist(strsplit(toupper(genes),":"))[1]
+        }
     }
-    for(i in 1:ncol(mm)){
-      w<-which(mm[,i]>0)
-      if(length(w)>0){
-        mm[4,i]<-mm[w[1],i]
-      } else {
-        mm[4,i]<-0
-      }
+    if(!multiple){
+        mm<-matrix(0,4,length(genes))
+        for(i in 1:3){
+            mm[i,]<-match(genes,as.character(templ[,i]),nomatch=0)
+        }
+        for(i in 1:ncol(mm)){
+            w<-which(mm[,i]>0)
+            if(length(w)>0){
+                mm[4,i]<-mm[w[1],i]
+            } else {
+                mm[4,i]<-0
+            }
+        }
+    } else {
+       mm<-matrix(0,4,nrow(templ))
+       for(i in 1:3){
+           mm[i,]<-match(as.character(templ[,i]),genes,nomatch=0)
+       }
+       for(i in 1:ncol(mm)){
+           w<-which(mm[,i]>0)
+           if(length(w)>0){
+               mm[4,i]<-mm[w[1],i]
+           } else {
+               mm[4,i]<-0
+           }
+       }
     }
-  } else {
-    mm<-matrix(0,4,nrow(templ))
-    for(i in 1:3){
-      mm[i,]<-match(tolower(as.character(templ[,i])),tolower(genes),nomatch=0)
-    }
-    for(i in 1:ncol(mm)){
-      w<-which(mm[,i]>0)
-      if(length(w)>0){
-        mm[4,i]<-mm[w[1],i]
-      } else {
-        mm[4,i]<-0
-      }
-    }
-  }
   return(mm[4,])
 }
+
 
 #' Modify the data if the subsequent steps of DIMER have been used
 #'
@@ -1020,193 +1033,213 @@ addggText<-function(plotData,vars,dims){
 #'
 Scatter<-function(Data,feature,grouping.by,highlight.by,showDims,dot.size,interactive){
 
-  # extract the data of interest
-  plotData<-Data$Design
-  filteredData<-Data$selectedData$Design
-  mm<-match(rownames(filteredData),rownames(plotData),nomatch=0)
-  sel<-rep("Non-Selected",nrow(plotData))
-  sel[mm]<-"Selected"
-  plotData<-cbind(plotData,SelectedSamples=sel,SelectedShapes=rep(1,nrow(plotData)),SelectedSizes=rep(1,nrow(plotData)))
+    # extract the data of interest
+    plotData<-Data$Design
+    filteredData<-Data$selectedData$Design
+    mm<-match(rownames(filteredData),rownames(plotData),nomatch=0)
+    sel<-rep("Non-Selected",nrow(plotData))
+    sel[mm]<-"Selected"
+    plotData<-cbind(plotData,SelectedSamples=sel,SelectedShapes=rep(1,nrow(plotData)),SelectedSizes=rep(1,nrow(plotData)))
 
-  # record the dimensions
-  dims<-Data$Dimensions
+    # record the dimensions
+    dims<-Data$Dimensions
 
 
-  # colors for gene (for cells features it is the viridis)
-  my_colors<-makecolors_scatterplot(Data=Data,plotData=plotData,feature=feature)
+    # colors for gene (for cells features it is the viridis)
+    my_colors<-makecolors_scatterplot(Data=Data,plotData=plotData,feature=feature)
 
-  # fix the shapes and sizes
-  plotData<-ShapeSize(plotData=plotData,my_colors=my_colors,dot.size=dot.size,feature=feature,grouping.by=grouping.by)
+    # fix the shapes and sizes
+    plotData<-ShapeSize(plotData=plotData,my_colors=my_colors,dot.size=dot.size,feature=feature,grouping.by=grouping.by)
 
-  # check for the dims
-  if(length(showDims)<2){
-    stop("
+    # check for the dims
+    if(length(showDims)<2){
+        stop("
         ***** The scatterplot is requires at least two dimensions. Check the showDims parameter. *****
         ")
-  }
-  cc<-colnames(plotData)[as.numeric(dims[,2])]
-  mm<-match(showDims,cc,nomatch=0)
-  if(length(mm[mm==0])>0){
-    stop("
+    }
+    cc<-colnames(plotData)[as.numeric(dims[,2])]
+    mm<-match(showDims,cc,nomatch=0)
+    if(length(mm[mm==0])>0){
+        stop("
         ***** One of the requested dimensions does not exist in the data. Consider revising the showDims parameter. *****
         ")
-  }
-
-  # check for the existence of the highlight variable
-  if(!is.null(highlight.by)){
-    ww<-which(colnames(plotData)==highlight.by)
-    if(length(ww)==0){
-      print(paste("***** The highlight.by variable does not exist on the data. Setting it to NULL! *****",sep=""))
-      highlight.by<-1
-    }
-  } else {
-    highlight.by<-1
-  }
-
-
-  if(my_colors$type=="gene_numeric"){
-
-    dot_label<-paste(rownames(plotData),": ",
-                     plotData$Condition," ",
-                     plotData$CellType," Expr=",
-                     my_colors$column,sep="")
-
-  } else {
-
-    dot_label<-paste(rownames(plotData),": ",
-                     plotData$Condition," ",
-                     plotData$CellType,sep="")
-
-  }
-
-
-
-  # start the plot
-  ppp1<-c()
-  plot.int<-plot.noint<-as.list(rep(0,3))
-
-  if(interactive){
-    index<-0
-    for(i in 1:(length(mm)-1)){
-      for(j in (i+1):length(mm)){
-
-        index<-index+1
-
-        plot.int[[index]] <- plotData %>% highlight_key(formula(paste("~",highlight.by))) %>% plot_ly(
-          x=as.numeric(as.character(plotData[,as.numeric(dims[mm[i],2])])),
-          y=as.numeric(as.character(plotData[,as.numeric(dims[mm[j],2])])),
-          color=my_colors$column,
-          colors=my_colors$palette,
-          type="scatter",
-          marker=list(size=plotData$SelectedSizes,line=list(width=3)),
-          text = dot_label,
-          symbol=plotData$SelectedShapes,
-          symbols=sort(as.numeric(as.character(unique(plotData$SelectedShapes))))
-        ) %>%
-
-          layout(title=paste("Marker ID: <a href='https://www.ncbi.nlm.nih.gov/gene/?term=",GeneNames(feature,what="Name"),"'>",GeneNames(feature,what="Name"),"</a>",sep=""),
-                 xaxis=list(title=paste("tSNE ",colnames(plotData)[as.numeric(dims[mm[i],2])]," <br> <br> The gradient shows the normalised expression range of the selected gene across all cells",sep=""),
-                            range = range(as.numeric(as.character(Data$Design[,as.numeric(dims[mm[i],2])])))+c(-0.5,0.5)),
-                 yaxis=list(title=paste("tSNE ",colnames(plotData)[as.numeric(dims[mm[j],2])],sep=""),range = range(as.numeric(as.character(Data$Design[,as.numeric(dims[mm[j],2])])))+c(-0.5,0.5)),showlegend=F)
-
-      }
     }
 
-    if(length(mm)>2){
-      ppp1<-subplot(plot.int[[1]],plot.int[[2]],plot.int[[3]],nrows=2,shareX=T,shareY=T)
+    # check for the existence of the highlight variable
+    if(!is.null(highlight.by)){
+        ww<-which(colnames(plotData)==highlight.by)
+        if(length(ww)==0){
+
+            spl<-unlist(strsplit(highlight.by,":",fixed=TRUE))
+            if(length(spl)>1){
+                hb<-matrix(0,nrow(plotData),length(spl))
+                for(i in 1:length(spl)){
+                    hb[,i]<-plotData[,which(colnames(plotData)==spl[i])]
+                }
+                hb<-apply(hb,1,paste,collapse="_")
+                plotData<-cbind(plotData,Interaction=hb)
+                highlight.by<-"Interaction"
+            } else {
+                print(paste("***** The highlight.by variable does not exist on the data. Setting it to NULL! *****",sep=""))
+                highlight.by<-1
+            }
+        }
     } else {
-      ppp1<-plot.int[[1]]
+        highlight.by<-1
     }
 
 
-  } else {
+    if(my_colors$type=="gene_numeric"){
 
-    # the non-interactive Scatterplot genes is done here
-    index<-0
-    for(i in 1:(length(mm)-1)){
-      for(j in (i+1):length(mm)){
+            dot_label<-paste(rownames(plotData),": ",
+                                plotData$Condition," ",
+                                plotData$CellType," Expr=",
+                                my_colors$column,sep="")
 
-        index<-index+1
+    } else {
 
-        plot.noint[[index]]<-ggplot(plotData,aes_string(
-          x=as.numeric(as.character(plotData[,as.numeric(dims[mm[i],2])])),
-          y=as.numeric(as.character(plotData[,as.numeric(dims[mm[j],2])])),
-          color=my_colors$column)) +
-          #geom_point(size=(dot.size/10)) +
-          geom_point(size=(plotData$SelectedSizes/4),shape=plotData$SelectedShapes,stroke=0.8) +
-          xlim(range(as.numeric(as.character(Data$Design[,as.numeric(dims[mm[i],2])])))) +
-          ylim(range(as.numeric(as.character(Data$Design[,as.numeric(dims[mm[j],2])]))))
-        if(my_colors$type=="gene_numeric"){
-          plot.noint[[index]] <- plot.noint[[index]] +
-            scale_colour_gradient(low = my_colors$palette[1], high = my_colors$palette[50])
-        }
-        if(my_colors$type=="cell_nonexist_numeric"){
-          plot.noint[[index]] <- plot.noint[[index]] +
-            scale_color_viridis()
-        }
-        if(my_colors$type=="cell_nonexist_factor"){
-          plot.noint[[index]] <- plot.noint[[index]] +
-            scale_color_manual(breaks=my_colors$features,values=my_colors$palette,name=feature)
-        }
-        if(my_colors$type=="cell_exist_numeric" | my_colors$type=="cell_exist_factor"){
-          plot.noint[[index]] <- plot.noint[[index]] +
-            scale_color_manual(breaks=my_colors$features,values=my_colors$palette,name=feature)
-        }
-        plot.noint[[index]] <- plot.noint[[index]] +
-          labs(x=colnames(plotData)[as.numeric(dims[mm[i],2])],y=colnames(plotData)[as.numeric(dims[mm[j],2])],
-               color=plotData[,which(colnames(plotData)==feature)]) +
-          labs(color=GeneNames(feature,what="Name")) +
-          theme_light()
+            dot_label<-paste(rownames(plotData),": ",
+                            plotData$Condition," ",
+                            plotData$CellType,sep="")
 
-        if(!is.null(grouping.by)){
-          if(my_colors$type=="gene_numeric" | my_colors$type=="cell_nonexist_numeric" | my_colors$type=="cell_exist_numeric"){
-            pp<-addggText(plotData=plotData,vars=c(grouping.by,"SelectedSamples"),dims=c(as.numeric(dims[mm[i],2]),as.numeric(dims[mm[j],2])))
-            g<-grep("Non-Selected",pp[,1])
-            if(length(g)>0){
-              pp<-as.matrix(pp[-g,])
+    }
+
+
+
+    # start the plot
+    ppp1<-c()
+    plot.int<-plot.noint<-as.list(rep(0,3))
+
+    ti<- paste("tSNE plot of <b> Gene ID: <a href='https://www.ncbi.nlm.nih.gov/gene/?term=",
+                GeneNames(feature,what="Name"),"'>",
+                GeneNames(feature,what="Name"),"</a> </b>",sep="")
+
+
+
+    if(interactive){
+        index<-0
+        for(i in 1:(length(mm)-1)){
+            for(j in (i+1):length(mm)){
+
+                index<-index+1
+
+                plot.int[[index]] <- plotData %>% highlight_key(formula(paste("~",highlight.by))) %>% plot_ly(
+                x=as.numeric(as.character(plotData[,as.numeric(dims[mm[i],2])])),
+                y=as.numeric(as.character(plotData[,as.numeric(dims[mm[j],2])])),
+                color=my_colors$column,
+                colors=my_colors$palette,
+                type="scatter",
+                marker=list(size=plotData$SelectedSizes,line=list(width=3)),
+                text = dot_label,
+                symbol=plotData$SelectedShapes,
+                symbols=sort(as.numeric(as.character(unique(plotData$SelectedShapes))))
+                ) %>%
+
+                layout(title=list(text=ti,font=list(color="black",size=22),x=0.03,y=0.997),
+                    xaxis=list(title=paste("<b>tSNE ",colnames(plotData)[as.numeric(dims[mm[i],2])],"</b> <br> <br> (<i>The color gradient bar shows the normalised expression range of the selected gene</i>) ",sep=""),
+                    range = range(as.numeric(as.character(Data$Design[,as.numeric(dims[mm[i],2])])))+c(-0.5,0.5)),
+                    yaxis=list(title=paste("<b>tSNE ",colnames(plotData)[as.numeric(dims[mm[j],2])],"</b>",sep=""),range = range(as.numeric(as.character(Data$Design[,as.numeric(dims[mm[j],2])])))+c(-0.5,0.5)),showlegend=F)
+
+
+
             }
-            pp[,1]<-t(matrix(unlist(strsplit(pp[,1],":")),nrow=2))[,1]
-          } else {
-            pp<-addggText(plotData=plotData,vars=c(feature,grouping.by,"SelectedSamples"),dims=c(as.numeric(dims[mm[i],2]),as.numeric(dims[mm[j],2])))
-            g<-grep("Non-Selected",pp[,1])
-            if(length(g)>0){
-              pp<-as.matrix(pp[-g,])
-            }
-            pp[,1]<-apply(t(matrix(unlist(strsplit(pp[,1],":")),nrow=3))[,1:2],1,paste,collapse=":")
-          }
+        }
 
+        if(length(mm)>2){
+            ppp1<-subplot(plot.int[[1]],plot.int[[2]],plot.int[[3]],nrows=2,shareX=T,shareY=T)
         } else {
-
-          if(my_colors$type=="gene_numeric" | my_colors$type=="cell_nonexist_numeric" | my_colors$type=="cell_exist_numeric"){
-            pp<-NULL
-            print(paste(
-              "***** The scatterplot will not be annotated unless the grouping.by variable is specified. *****",sep="")
-            )
-          } else {
-            pp<-addggText(plotData=plotData,vars=c(feature,"SelectedSamples"),dims=c(as.numeric(dims[mm[i],2]),as.numeric(dims[mm[j],2])))
-            g<-grep("Non-Selected",pp[,1])
-            if(length(g)>0){
-              pp<-as.matrix(pp[-g,])
-            }
-            pp[,1]<-t(matrix(unlist(strsplit(pp[,1],":")),nrow=2))[,1]
-          }
-
+            ppp1<-plot.int[[1]]
         }
 
-        if(!is.null(pp)){
-          plot.noint[[index]] <- plot.noint[[index]] + annotate("text",x=as.numeric(as.character(pp[,2])),y=as.numeric(as.character(pp[,3])),label=as.character(pp[,1]),size=2)
-        }
-      }
-    }
 
-    if(length(mm)>2){
-      ppp1<-ggarrange(plot.noint[[1]],ggarrange(plot.noint[[2]], plot.noint[[3]], ncol = 2, labels = c(" ", " ")),nrow = 2,labels = " ")
     } else {
-      ppp1<-plot.noint[[1]]
-    }
-  }
 
-  return(list(Plot=ppp1,feature=feature))
+        # the non-interactive Scatterplot genes is done here
+        index<-0
+        for(i in 1:(length(mm)-1)){
+            for(j in (i+1):length(mm)){
+
+                index<-index+1
+
+                plot.noint[[index]]<-ggplot(plotData,aes_string(
+                    x=as.numeric(as.character(plotData[,as.numeric(dims[mm[i],2])])),
+                    y=as.numeric(as.character(plotData[,as.numeric(dims[mm[j],2])])),
+                    color=my_colors$column)) +
+                    #geom_point(size=(dot.size/10)) +
+                    geom_point(size=(plotData$SelectedSizes/4),shape=plotData$SelectedShapes,stroke=0.8) +
+                    xlim(range(as.numeric(as.character(Data$Design[,as.numeric(dims[mm[i],2])])))) +
+                    ylim(range(as.numeric(as.character(Data$Design[,as.numeric(dims[mm[j],2])]))))
+                if(my_colors$type=="gene_numeric"){
+                    plot.noint[[index]] <- plot.noint[[index]] +
+                        scale_colour_gradient(low = my_colors$palette[1], high = my_colors$palette[50])
+                }
+                if(my_colors$type=="cell_nonexist_numeric"){
+                        plot.noint[[index]] <- plot.noint[[index]] +
+                            scale_color_viridis()
+                }
+                if(my_colors$type=="cell_nonexist_factor"){
+                        plot.noint[[index]] <- plot.noint[[index]] +
+                            scale_color_manual(breaks=my_colors$features,values=my_colors$palette,name=feature)
+                }
+                if(my_colors$type=="cell_exist_numeric" | my_colors$type=="cell_exist_factor"){
+                    plot.noint[[index]] <- plot.noint[[index]] +
+                        scale_color_manual(breaks=my_colors$features,values=my_colors$palette,name=feature)
+                }
+                plot.noint[[index]] <- plot.noint[[index]] +
+                    labs(x=colnames(plotData)[as.numeric(dims[mm[i],2])],y=colnames(plotData)[as.numeric(dims[mm[j],2])],
+                        color=plotData[,which(colnames(plotData)==feature)]) +
+                        labs(color=GeneNames(feature,what="Name")) +
+                    theme_light()
+
+                if(!is.null(grouping.by)){
+                    if(my_colors$type=="gene_numeric" | my_colors$type=="cell_nonexist_numeric" | my_colors$type=="cell_exist_numeric"){
+                        pp<-addggText(plotData=plotData,vars=c(grouping.by,"SelectedSamples"),dims=c(as.numeric(dims[mm[i],2]),as.numeric(dims[mm[j],2])))
+                        g<-grep("Non-Selected",pp[,1])
+                        if(length(g)>0){
+                            pp<-as.matrix(pp[-g,])
+                        }
+                        pp[,1]<-t(matrix(unlist(strsplit(pp[,1],":")),nrow=2))[,1]
+                    } else {
+                        pp<-addggText(plotData=plotData,vars=c(feature,grouping.by,"SelectedSamples"),dims=c(as.numeric(dims[mm[i],2]),as.numeric(dims[mm[j],2])))
+                        g<-grep("Non-Selected",pp[,1])
+                        if(length(g)>0){
+                            pp<-as.matrix(pp[-g,])
+                        }
+                        pp[,1]<-apply(t(matrix(unlist(strsplit(pp[,1],":")),nrow=3))[,1:2],1,paste,collapse=":")
+                    }
+
+                } else {
+
+                    if(my_colors$type=="gene_numeric" | my_colors$type=="cell_nonexist_numeric" | my_colors$type=="cell_exist_numeric"){
+                        pp<-NULL
+                        print(paste(
+                        "***** The scatterplot will not be annotated unless the grouping.by variable is specified. *****",sep="")
+                        )
+                    } else {
+                        pp<-addggText(plotData=plotData,vars=c(feature,"SelectedSamples"),dims=c(as.numeric(dims[mm[i],2]),as.numeric(dims[mm[j],2])))
+                        g<-grep("Non-Selected",pp[,1])
+                        if(length(g)>0){
+                            pp<-as.matrix(pp[-g,])
+                        }
+                        pp[,1]<-t(matrix(unlist(strsplit(pp[,1],":")),nrow=2))[,1]
+                    }
+
+                }
+
+                if(!is.null(pp)){
+                    plot.noint[[index]] <- plot.noint[[index]] + annotate("text",x=as.numeric(as.character(pp[,2])),y=as.numeric(as.character(pp[,3])),label=as.character(pp[,1]),size=2)
+                }
+            }
+        }
+
+        if(length(mm)>2){
+            ppp1<-ggarrange(plot.noint[[1]],ggarrange(plot.noint[[2]], plot.noint[[3]], ncol = 2, labels = c(" ", " ")),nrow = 2,labels = " ")
+        } else {
+            ppp1<-plot.noint[[1]]
+        }
+    }
+
+ return(list(Plot=ppp1,feature=feature))
 }
 
 
@@ -1335,148 +1368,207 @@ makecolors_violin<-function(plotData,feature,grouping.by,split.by){
 #'
 Violin<-function(Data,feature,grouping.by,split.by,dot.size,interactive){
 
-  # extract the data of interest
-  plotData<-data.frame(as.matrix(Data$selectedData$Design),check.names=FALSE)
-  dims<-Data$Dimensions
+    # extract the data of interest
+    plotData<-data.frame(as.matrix(Data$selectedData$Design),check.names=FALSE)
+    dims<-Data$Dimensions
 
-  my_colors<-makecolors_violin(plotData=plotData,feature=feature,grouping.by=grouping.by,split.by=split.by)
-  if(length(my_colors$wsplit)==0){
-    split.by<-NULL
-  }
-
-
-  ppp2<-c()
+    my_colors<-makecolors_violin(plotData=plotData,feature=feature,grouping.by=grouping.by,split.by=split.by)
+    if(length(my_colors$wsplit)==0){
+      split.by<-NULL
+    }
 
 
-  if(interactive){
+    ppp2<-c()
 
-    if(is.null(split.by)){
 
-      ppp2<-plot_ly(plotData,
-                    x=~as.character(plotData[,my_colors$wgrouping]),
-                    y=~as.numeric(as.character(plotData[,ncol(plotData)])),
-                    split=~as.character(plotData[,my_colors$wgrouping]),
-                    type="violin",
-                    text=paste(rownames(plotData),": ",plotData$Condition," ",plotData$CellType,sep=""),
-                    box = list(visible = T),meanline = list(visible = T),
-                    points = 'all',
-                    marker=list(size=dot.size),
-                    color=I(as.character(plotData$Colors_CellType))) %>%
-        layout(yaxis = list(title = "log2 Normalised Expression"),xaxis=list(title=grouping.by)) %>%
-        layout(title=paste("Marker ID: <a href='https://www.ncbi.nlm.nih.gov/gene/?term=",GeneNames(feature,what="Name"),"'>",GeneNames(feature,what="Name"),"</a>",sep=""))
+    if(interactive){
 
+
+
+            if(is.null(split.by)){
+
+                ti<- paste("Violin plot of <b> Gene ID: <a href='https://www.ncbi.nlm.nih.gov/gene/?term=",
+                GeneNames(feature,what="Name"),"'>",
+                GeneNames(feature,what="Name"),"</a> </b>",sep="")
+
+                ppp2<-plot_ly(plotData,
+                x=~as.character(plotData[,my_colors$wgrouping]),
+                y=~as.numeric(as.character(plotData[,ncol(plotData)])),
+                split=~as.character(plotData[,my_colors$wgrouping]),
+                type="violin",
+                spanmode="hard",
+                text=paste(rownames(plotData),": ",plotData$Condition," ",plotData$CellType,sep=""),
+                box = list(visible = F),meanline = list(visible = T),
+                points = 'all',
+                bandwidth=0.999,
+                marker=list(size=dot.size),
+                color=I(as.character(plotData$Colors_CellType))) %>%
+                    layout(title=list(text=ti,font=list(color="black",size=22),x=0.03,y=0.997),
+                    xaxis=list(title=paste("<b>Cell Type</b>",sep="")),
+                    yaxis=list(title=paste("<b>log2 Normalised Expression</b>",sep="")),showlegend=F)
+
+            } else {
+
+                ti<- paste("Split-violin plot of <b> Gene ID: <a href='https://www.ncbi.nlm.nih.gov/gene/?term=",
+                GeneNames(feature,what="Name"),"'>",
+                GeneNames(feature,what="Name"),"</a> </b>",sep="")
+
+                xgroups<-sort(unique(as.character(plotData[,my_colors$wgrouping])))
+                vgroups<-sort(unique(as.character(plotData[,my_colors$wsplit])))
+
+                yvals<-as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1],ncol(plotData)]))
+                ll<-length(yvals[yvals>0])
+                if(ll>0){
+                    cols<-I(rep("#ee8572",length(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1]]))))
+                } else {
+                    cols<-rep(NA,length(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1]])))
+                }
+
+
+
+                    ppp2<-plot_ly(
+                        x=plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1],my_colors$wgrouping],
+                        y=as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1],ncol(plotData)])),
+                        type="violin",
+                        side="negative",
+                        name=vgroups[1],
+                        bandwidth=0.999,
+                        spanmode="hard",
+                        #jitter=0,
+                        text=paste(rownames(plotData)[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1]],": ",
+                            plotData$Condition[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1]]," ",
+                            plotData$CellType[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1]],sep=""),
+                        box = list(visible = F),meanline = list(visible = T),
+                        points = 'all',
+                        marker=list(size=3),
+                        color=cols) %>%
+                                layout(title=list(text=ti,font=list(color="black",size=22),x=0.03,y=0.997),
+                                yaxis=list(title=paste("<b>log2 Normalised Expression</b>",sep="")),
+                                xaxis=list(title=paste("<b>Cell Type by Condition</b> <br> <br> (<i>Missing split-violins indicate that the gene is unexpressed in the cell type / condition</i>) ",sep="")),showlegend=T)
+
+                yvals<-as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2],ncol(plotData)]))
+                ll<-length(yvals[yvals>0])
+
+                if(ll>0){
+                    cols<-I(rep("#63b7af",length(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2]]))))
+                } else {
+                    cols<-rep(NA,length(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2]])))
+                }
+
+                    ppp2<-ppp2 %>%
+                        add_trace(
+                            x=plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2],my_colors$wgrouping],
+                            y=as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2],ncol(plotData)])),
+                            type="violin",
+                            side="positive",
+                            name=vgroups[2],
+                             bandwidth=0.999,
+                             spanmode="hard",
+                            #jitter=0,
+                            text=paste(rownames(plotData)[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2]],": ",
+                                plotData$Condition[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2]]," ",
+                                plotData$CellType[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2]],sep=""),
+                            box = list(visible = F),meanline = list(visible = T),
+                            points = 'all',
+                            marker=list(size=3),
+                            color=cols)
+
+                if(length(xgroups)>1){
+                    for (i in 2:length(xgroups)){
+
+                        yvals<-as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1],ncol(plotData)]))
+                        ll<-length(yvals[yvals>0])
+                        if(ll>0){
+                            cols<-I(rep("#ee8572",length(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1]]))))
+                        } else {
+                            cols<-rep(NA,length(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1]])))
+                        }
+
+                            ppp2<-ppp2 %>%
+                                add_trace(
+                                    x=plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1],my_colors$wgrouping],
+                                    y=as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1],ncol(plotData)])),
+                                    type="violin",
+                                    side="negative",
+                                    name=vgroups[1],
+                                     bandwidth=0.999,
+                                     spanmode="hard",
+                                    #jitter=0,
+                                    text=paste(rownames(plotData)[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1]],": ",
+                                        plotData$Condition[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1]]," ",
+                                        plotData$CellType[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1]],sep=""),
+                                    box = list(visible = F),meanline = list(visible = T),
+                                    points = 'all',
+                                    marker=list(size=3),
+                                    color=cols,showlegend=FALSE)
+
+
+                        yvals<-as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2],ncol(plotData)]))
+                        ll<-length(yvals[yvals>0])
+                        if(ll>0){
+                            cols<-I(rep("#63b7af",length(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2]]))))
+                        } else {
+                            cols<-rep(NA,length(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2]])))
+                        }
+
+                            ppp2<-ppp2 %>%
+                                add_trace(
+                                    x=plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2],my_colors$wgrouping],
+                                    y=as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2],ncol(plotData)])),
+                                    type="violin",
+                                    side="positive",
+                                    name=vgroups[2],
+                                     bandwidth=0.99,
+                                     spanmode="hard",
+                                    #jitter=0,
+                                    text=paste(rownames(plotData)[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2]],": ",
+                                        plotData$Condition[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2]]," ",
+                                        plotData$CellType[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2]],sep=""),
+                                    box = list(visible = F),meanline = list(visible = T),
+                                    points = 'all',
+                                    marker=list(size=3),
+                                    color=cols,showlegend=FALSE)
+                    }
+                }
+            }
 
     } else {
 
-      xgroups<-sort(unique(as.character(plotData[,my_colors$wgrouping])))
-      vgroups<-sort(unique(as.character(plotData[,my_colors$wsplit])))
-      ppp2<-plot_ly(
-        x=plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1],my_colors$wgrouping],
-        y=as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1],ncol(plotData)])),
-        type="violin",
-        side="negative",
-        name=vgroups[1],
-        #jitter=0,
-        text=paste(rownames(plotData)[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1]],": ",
-                   plotData$Condition[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1]]," ",
-                   plotData$CellType[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1]],sep=""),
-        box = list(visible = F),meanline = list(visible = T),
-        points = 'all',
-        marker=list(size=3),
-        color=I(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[1]]))) %>%
-        layout(yaxis = list(title = "log2 Normalised Expression"),
-               violingap = -1,
-               violingroupgap = -1) %>%
-        layout(title=paste("Marker ID: <a href='https://www.ncbi.nlm.nih.gov/gene/?term=",GeneNames(feature,what="Name"),"'>",GeneNames(feature,what="Name"),"</a>",sep=""))
-      ppp2<-ppp2 %>%
-        add_trace(
-          x=plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2],my_colors$wgrouping],
-          y=as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2],ncol(plotData)])),
-          type="violin",
-          side="positive",
-          name=vgroups[2],
-          #jitter=0,
-          text=paste(rownames(plotData)[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2]],": ",
-                     plotData$Condition[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2]]," ",
-                     plotData$CellType[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2]],sep=""),
-          box = list(visible = F),meanline = list(visible = T),
-          points = 'all',
-          marker=list(size=3),
-          color=I(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[1] & plotData[,my_colors$wsplit]==vgroups[2]])))
 
-      if(length(xgroups)>1){
-        for (i in 2:length(xgroups)){
-          ppp2<-ppp2 %>%
-            add_trace(
-              x=plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1],my_colors$wgrouping],
-              y=as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1],ncol(plotData)])),
-              type="violin",
-              side="negative",
-              name=vgroups[1],
-              #jitter=0,
-              text=paste(rownames(plotData)[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1]],": ",
-                         plotData$Condition[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1]]," ",
-                         plotData$CellType[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1]],sep=""),
-              box = list(visible = F),meanline = list(visible = T),
-              points = 'all',
-              marker=list(size=3),
-              color=I(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[1]])),showlegend=FALSE)
-          ppp2<-ppp2 %>%
-            add_trace(
-              x=plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2],my_colors$wgrouping],
-              y=as.numeric(as.character(plotData[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2],ncol(plotData)])),
-              type="violin",
-              side="positive",
-              name=vgroups[2],
-              #jitter=0,
-              text=paste(rownames(plotData)[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2]],": ",
-                         plotData$Condition[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2]]," ",
-                         plotData$CellType[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2]],sep=""),
-              box = list(visible = F),meanline = list(visible = T),
-              points = 'all',
-              marker=list(size=3),
-              color=I(as.character(my_colors$colors[plotData[,my_colors$wgrouping]==xgroups[i] & plotData[,my_colors$wsplit]==vgroups[2]])),showlegend=FALSE)
+        # the non-interactive violin is done here
+        if(is.null(split.by)){
+
+            uc<-unique(cbind(as.character(plotData[,my_colors$wgrouping]),as.character(my_colors$colors)))
+            uc<-uc[sort.list(uc[,1]),]
+
+            ppp2<-ggplot(plotData,aes(
+                x=as.character(plotData[,my_colors$wgrouping]),
+                y=as.numeric(as.character(plotData[,ncol(plotData)])),
+                fill=as.character(plotData[,my_colors$wgrouping]))) +
+                geom_violin() +
+                geom_jitter(shape=20, position=position_jitter(0.2),size=(dot.size/10)) +
+                scale_fill_manual(breaks=as.character(uc[,1]),values=as.character(uc[,2]),name=grouping.by) +
+                labs(x="",y="Expression",title=GeneNames(feature,what="Name")) +
+                theme_light()
+
+        } else {
+
+            uc<-unique(cbind(as.character(plotData[,my_colors$wsplit]),as.character(my_colors$colors)))
+            uc<-uc[sort.list(uc[,1]),]
+
+            ppp2<-ggplot(plotData, aes(
+                x=as.character(plotData[,my_colors$wgrouping]),
+                y=as.numeric(as.character(plotData[,ncol(plotData)])),
+                fill = as.character(plotData[,my_colors$wsplit]))) +
+                geom_split_violin() +
+                geom_jitter(shape=20, position=position_jitter(0.2),size=(dot.size/10)) +
+                scale_fill_manual(breaks=as.character(uc[,1]),values=as.character(uc[,2]),name=split.by) +
+                labs(x="",y="Expression",title=GeneNames(feature,what="Name")) +
+                theme_light()
+
         }
-      }
-    }
-
-  } else {
-
-
-    # the non-interactive violin is done here
-    if(is.null(split.by)){
-
-      uc<-unique(cbind(as.character(plotData[,my_colors$wgrouping]),as.character(my_colors$colors)))
-      uc<-uc[sort.list(uc[,1]),]
-
-      ppp2<-ggplot(plotData,aes(
-        x=as.character(plotData[,my_colors$wgrouping]),
-        y=as.numeric(as.character(plotData[,ncol(plotData)])),
-        fill=as.character(plotData[,my_colors$wgrouping]))) +
-        geom_violin() +
-        geom_jitter(shape=20, position=position_jitter(0.2),size=(dot.size/10)) +
-        scale_fill_manual(breaks=as.character(uc[,1]),values=as.character(uc[,2]),name=grouping.by) +
-        labs(x="",y="Expression",title=GeneNames(feature,what="Name")) +
-        theme_light()
-
-    } else {
-
-      uc<-unique(cbind(as.character(plotData[,my_colors$wsplit]),as.character(my_colors$colors)))
-      uc<-uc[sort.list(uc[,1]),]
-
-      ppp2<-ggplot(plotData, aes(
-        x=as.character(plotData[,my_colors$wgrouping]),
-        y=as.numeric(as.character(plotData[,ncol(plotData)])),
-        fill = as.character(plotData[,my_colors$wsplit]))) +
-        geom_split_violin() +
-        geom_jitter(shape=20, position=position_jitter(0.2),size=(dot.size/10)) +
-        scale_fill_manual(breaks=as.character(uc[,1]),values=as.character(uc[,2]),name=split.by) +
-        labs(x="",y="Expression",title=GeneNames(feature,what="Name")) +
-        theme_light()
 
     }
-
-  }
 
   return(list(Plot=ppp2,feature=feature))
 }
@@ -1548,127 +1640,130 @@ geom_split_violin <- function(mapping = NULL, data = NULL, stat = "ydensity", po
 #'
 Volcano<-function(Data,de.comparison,logFC_cut,FDR_cut,show.more,dot.size,interactive){
 
-  qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
-  col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+    qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+    col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
 
-  de.comparison<-as.expression(parse(text=de.comparison))
-  plotData<-DEplot_entries(deData=Data$DEstats,filters=de.comparison)
-  comparison<-rbind(plotData[[2]]$FactorFilters,plotData[[2]]$NumericFilters)
-  comparison<-paste(apply(comparison,1,paste,collapse=":"),collapse=" & ")
+    de.comparison<-as.expression(parse(text=de.comparison))
+    plotData<-DEplot_entries(deData=Data$DEstats,filters=de.comparison)
+    comparison<-rbind(plotData[[2]]$FactorFilters,plotData[[2]]$NumericFilters)
+    comparison<-paste(apply(comparison,1,paste,collapse=":"),collapse=" & ")
 
-  ppp3<-c()
-  plotData<-plotData[[1]]
-  plotData$PValue[plotData$PValue==0]<-min(as.numeric(as.character(plotData$PValue[plotData$PValue>0])))
-  lp<- -log(as.numeric(as.character(plotData$PValue)),10)
-  signf<-rep("Non-DE",nrow(plotData))
-  signf[abs(as.numeric(as.character(plotData$logFC)))>=logFC_cut & as.numeric(as.character(plotData$FDR))<=FDR_cut]<-"DE"
-  sel<-rep(" ",nrow(plotData))
-  x<-as.character(plotData[,1])
-  x<-cbind(x,GeneNames(x,what="Other"),GeneNames(x,what="Name"))
-  vcat<-as.numeric(as.character(plotData$logPValue))
-  vcat<-vcat[signf=="DE"]
-  if(length(vcat)>0){
-    vcat<-min(vcat)
-  } else {
-    vcat<-NA
-  }
-
-  if(show.more){
-    gg<-match(Data$filteredData$Marker_List,as.character(plotData[,1]))
-    gg<-plotData[gg,]
-    gg<-gg[sort.list(gg$PValue),]
-    gg<-unique(c(as.character(gg[1:min(70,nrow(gg)),1]),Data$selectedData$Marker_List))
-    mm<-findGeneType(templ=x,genes=gg,multiple=FALSE)
-    for(i in 1:length(mm)){
-      signf[mm[i]]<-paste("Marker: ",GeneNames(gg[i],what="Name"),sep="")
+    ppp3<-c()
+    plotData<-plotData[[1]]
+    plotData$PValue[plotData$PValue==0]<-min(as.numeric(as.character(plotData$PValue[plotData$PValue>0])))
+    lp<- -log(as.numeric(as.character(plotData$PValue)),10)
+    signf<-rep("Non-DE",nrow(plotData))
+    signf[abs(as.numeric(as.character(plotData$logFC)))>=logFC_cut & as.numeric(as.character(plotData$FDR))<=FDR_cut]<-"DE"
+    sel<-rep(" ",nrow(plotData))
+    x<-as.character(plotData[,1])
+    x<-cbind(x,GeneNames(x,what="Other"),GeneNames(x,what="Name"))
+    vcat<-as.numeric(as.character(plotData$logPValue))
+    vcat<-vcat[signf=="DE"]
+    if(length(vcat)>0){
+        vcat<-min(vcat)
+    } else {
+        vcat<-NA
     }
-  } else {
-    mm<-findGeneType(templ=x,genes=Data$selectedData$Marker_List,multiple=FALSE)
-    signf[mm]<-paste("Marker: ",GeneNames(Data$selectedData$Marker_List,what="Name"),sep="")
-  }
-  sel[mm]<-"Selected"
-  plotData<-cbind(plotData,logPValue=lp,Type=signf,Selected=sel)
 
-  cols<-rep("#8ca0ca",nrow(plotData))
-  cols[plotData$Type=="DE"]<-"#64ba9f"
-  cols[plotData$Selected=="Selected"]<-col_vector[1:as.numeric(table(plotData$Selected)[2])]
-  sh<-rep("circle",nrow(plotData))
-  sh[plotData$Selected!=" "]<-"triangle"
-  plotData<-cbind(plotData,Colors=cols,Shapes=sh)
-
-  selData<-plotData[plotData$Selected=="Selected",]
-  selData<-selData[sort.list(selData$Type),]
-  uu<-cbind(as.character(selData$Type),sort(as.character(selData$Colors)))
-  #uu<-uu[sort.list(uu[,1]),]
-
-  complegend<-unlist(strsplit(comparison,":",fixed=T))
-  complegend1<-paste(complegend[2:length(complegend)],collapse=": ")
-  complegend2<-unlist(strsplit(complegend[length(complegend)],"[: -]"))
-  complegend2<-complegend2[(length(complegend2)-1):length(complegend2)]
-  if(interactive){
-    ppp3<-plot_ly(type="scatter",mode="markers") %>%
-
-      layout(title=complegend1,
-             xaxis=list(title=paste("logFC <br> <br> logFC > 0 (logFC < 0) values indicate increased target expression in ",complegend2[1]," (",complegend2[2],")",sep="")),
-             yaxis=list(title="-log PValue"))
-
-    ppp3<-ppp3 %>% add_trace(name="Non-DE",
-                             x=as.numeric(as.character(plotData$logFC))[plotData$Selected==" " & plotData$Type=="Non-DE"],
-                             y=as.numeric(as.character(plotData$logPValue))[plotData$Selected==" " & plotData$Type=="Non-DE"],
-                             marker=list(color="#82c4c3"),
-                             text = as.character(plotData[plotData$Selected==" " & plotData$Type=="Non-DE",1]))
-
-    ppp3<-ppp3 %>% add_trace(name="DE",
-                             x=as.numeric(as.character(plotData$logFC))[plotData$Selected==" " & plotData$Type=="DE"],
-                             y=as.numeric(as.character(plotData$logPValue))[plotData$Selected==" " & plotData$Type=="DE"],
-                             marker=list(color="#fc8210"),
-                             text = as.character(plotData[plotData$Selected==" " & plotData$Type=="DE",1]))
-
-    ppp3<-ppp3 %>% add_trace(name=uu[,1],mode = 'text',textfont = list(color = 'transparent'),
-                             x=as.numeric(as.character(selData$logFC)),
-                             y=as.numeric(as.character(selData$logPValue)),
-                             marker=list(color="#6a097d",size=(dot.size*4)),
-                             symbol=selData$Selected,
-                             text = paste("<a href='https://www.ncbi.nlm.nih.gov/gene/?term=",GeneNames(uu[,1],what="Name"),"'>",uu[,1],"</a>",sep="")) %>%
-      add_lines(y = c(min(as.numeric(as.character(plotData$logPValue))), max(as.numeric(as.character(plotData$logPValue)))), x = c(logFC_cut, logFC_cut),color=I("gray"),size=I(1),showlegend=F) %>%
-      add_lines(y = c(min(as.numeric(as.character(plotData$logPValue))), max(as.numeric(as.character(plotData$logPValue)))), x = c(-logFC_cut, -logFC_cut),color=I("gray"),size=I(1),showlegend=F) %>%
-      add_lines(x = c(min(as.numeric(as.character(plotData$logFC))), max(as.numeric(as.character(plotData$logFC)))), y = c(vcat, vcat),color=I("gray"),size=I(1),showlegend=F)
-
-
-
-  } else {
-
-    if(length(which(names(table(signf))=="DE"))==0){
-      uu<-rbind(uu,cbind(matrix("Non-DE",ncol=1),matrix("#8ca0ca",ncol=1)))
+    if(show.more){
+        gg<-match(Data$filteredData$Marker_List,as.character(plotData[,1]))
+        gg<-plotData[gg,]
+        gg<-gg[sort.list(gg$PValue),]
+        gg<-unique(c(as.character(gg[1:min(70,nrow(gg)),1]),Data$selectedData$Marker_List))
+        mm<-findGeneType(templ=x,genes=gg,multiple=FALSE)
+        for(i in 1:length(mm)){
+            signf[mm[i]]<-paste("Marker: ",GeneNames(gg[i],what="Name"),sep="")
+        }
+    } else {
+        mm<-findGeneType(templ=x,genes=Data$selectedData$Marker_List,multiple=FALSE)
+        signf[mm]<-paste("Marker: ",GeneNames(Data$selectedData$Marker_List,what="Name"),sep="")
     }
-    if(length(which(names(table(signf))=="Non-DE"))==0){
-      uu<-rbind(uu,cbind(matrix("DE",ncol=1),matrix("#64ba9f",ncol=1)))
+    sel[mm]<-"Selected"
+    plotData<-cbind(plotData,logPValue=lp,Type=signf,Selected=sel)
+
+    cols<-rep("#8ca0ca",nrow(plotData))
+    cols[plotData$Type=="DE"]<-"#64ba9f"
+    cols[plotData$Selected=="Selected"]<-col_vector[1:as.numeric(table(plotData$Selected)[2])]
+    sh<-rep("circle",nrow(plotData))
+    sh[plotData$Selected!=" "]<-"triangle"
+    plotData<-cbind(plotData,Colors=cols,Shapes=sh)
+
+    selData<-plotData[plotData$Selected=="Selected",]
+    selData<-selData[sort.list(selData$Type),]
+    uu<-cbind(as.character(selData$Type),sort(as.character(selData$Colors)))
+    #uu<-uu[sort.list(uu[,1]),]
+
+    complegend<-unlist(strsplit(comparison,":",fixed=T))
+    complegend1<-paste(complegend[2:length(complegend)],collapse=": ")
+    complegend2<-unlist(strsplit(complegend[length(complegend)],"[: -]"))
+    complegend2<-complegend2[(length(complegend2)-1):length(complegend2)]
+    if(interactive){
+        ppp3<-plot_ly(type="scatter",mode="markers") %>%
+
+        layout(title=list(text=paste("Volcano plot of <b>",complegend1,"</b> cells",sep=""),font=list(color="black",size=22),x=0.03,y=0.997),
+        xaxis=list(title=paste("<b>log FC</b> <br> <br> (<i>log FC > 0 [log FC < 0] values indicate increased target expression in ",complegend2[1]," [",complegend2[2],"] cells</i>)",sep="")),
+        yaxis=list(title="<b>-log PValue</b>"))
+
+        ppp3<-ppp3 %>% add_trace(name="Non-DE",
+            x=as.numeric(as.character(plotData$logFC))[plotData$Selected==" " & plotData$Type=="Non-DE"],
+            y=as.numeric(as.character(plotData$logPValue))[plotData$Selected==" " & plotData$Type=="Non-DE"],
+            marker=list(color="#82c4c3"),
+            text = as.character(plotData[plotData$Selected==" " & plotData$Type=="Non-DE",1]))
+
+        ppp3<-ppp3 %>% add_trace(name="DE",
+            x=as.numeric(as.character(plotData$logFC))[plotData$Selected==" " & plotData$Type=="DE"],
+            y=as.numeric(as.character(plotData$logPValue))[plotData$Selected==" " & plotData$Type=="DE"],
+            marker=list(color="#fc8210"),
+            text = as.character(plotData[plotData$Selected==" " & plotData$Type=="DE",1]))
+
+        te<-"Non-significant"
+        if(abs(as.numeric(as.character(selData$logFC)))>=logFC_cut & as.numeric(as.character(selData$FDR))<=FDR_cut){
+            te<-"Significant"
+        }
+        ppp3<-ppp3 %>% add_trace(name=uu[,1],mode = 'text',textfont = list(color = 'transparent'),
+            x=as.numeric(as.character(selData$logFC)),
+            y=as.numeric(as.character(selData$logPValue)),
+            marker=list(color="#6a097d",size=(dot.size*4)),
+            symbol=selData$Selected,
+            text = paste("<a href='https://www.ncbi.nlm.nih.gov/gene/?term=",GeneNames(uu[,1],what="Name"),"'>",uu[,1],"</a> (",te,")",sep="")) %>%
+                add_lines(y = c(min(as.numeric(as.character(plotData$logPValue))), max(as.numeric(as.character(plotData$logPValue)))), x = c(logFC_cut, logFC_cut),color=I("gray"),size=I(1),showlegend=F) %>%
+                add_lines(y = c(min(as.numeric(as.character(plotData$logPValue))), max(as.numeric(as.character(plotData$logPValue)))), x = c(-logFC_cut, -logFC_cut),color=I("gray"),size=I(1),showlegend=F) %>%
+                add_lines(x = c(min(as.numeric(as.character(plotData$logFC))), max(as.numeric(as.character(plotData$logFC)))), y = c(vcat, vcat),color=I("gray"),size=I(1),showlegend=F)
+
+
+
+    } else {
+
+        if(length(which(names(table(signf))=="DE"))==0){
+            uu<-rbind(uu,cbind(matrix("Non-DE",ncol=1),matrix("#8ca0ca",ncol=1)))
+        }
+        if(length(which(names(table(signf))=="Non-DE"))==0){
+            uu<-rbind(uu,cbind(matrix("DE",ncol=1),matrix("#64ba9f",ncol=1)))
+        }
+        if(length(which(names(table(signf))=="DE"))>0 & length(which(names(table(signf))=="Non-DE"))>0){
+            uu<-rbind(uu,cbind(matrix(c("DE","Non-DE"),ncol=1),matrix(c("#64ba9f","#8ca0ca"),ncol=1)))
+        }
+        uu<-uu[sort.list(uu[,1]),]
+
+        ppp3<-ggplot(plotData,aes(
+            x=as.numeric(as.character(logFC)),
+            y=as.numeric(as.character(logPValue)),
+            color=Type)) +
+            geom_point(size=(dot.size/10)) +
+            scale_color_manual(breaks=as.character(uu[,1]),values=as.character(uu[,2])) +
+            xlim(range(as.numeric(as.character(plotData$logFC)))) +
+            ylim(range(as.numeric(as.character(plotData$logPValue)))) +
+            labs(x="logFC",y="log PValue",title=comparison) +
+            theme_light() +
+            geom_vline(xintercept=0,size=0.2)
+        ppp3<-ppp3+geom_point(data=selData,aes(x=as.numeric(as.character(logFC)),y=as.numeric(as.character(logPValue))),size=((dot.size/10)*4),shape="triangle") +
+                scale_fill_manual(breaks=uu[,1],values=as.character(uu[,2])) +
+                geom_vline(xintercept=c(-logFC_cut,logFC_cut), color = "gray",size=0.4) +  geom_hline(yintercept= vcat, color = "gray",size=0.4)
+
     }
-    if(length(which(names(table(signf))=="DE"))>0 & length(which(names(table(signf))=="Non-DE"))>0){
-      uu<-rbind(uu,cbind(matrix(c("DE","Non-DE"),ncol=1),matrix(c("#64ba9f","#8ca0ca"),ncol=1)))
-    }
-    uu<-uu[sort.list(uu[,1]),]
 
-    ppp3<-ggplot(plotData,aes(
-      x=as.numeric(as.character(logFC)),
-      y=as.numeric(as.character(logPValue)),
-      color=Type)) +
-      geom_point(size=(dot.size/10)) +
-      scale_color_manual(breaks=as.character(uu[,1]),values=as.character(uu[,2])) +
-      xlim(range(as.numeric(as.character(plotData$logFC)))) +
-      ylim(range(as.numeric(as.character(plotData$logPValue)))) +
-      labs(x="logFC",y="log PValue",title=comparison) +
-      theme_light() +
-      geom_vline(xintercept=0,size=0.2)
-    ppp3<-ppp3+geom_point(data=selData,aes(x=as.numeric(as.character(logFC)),y=as.numeric(as.character(logPValue))),size=((dot.size/10)*4),shape="triangle") +
-      scale_fill_manual(breaks=uu[,1],values=as.character(uu[,2])) +
-      geom_vline(xintercept=c(-logFC_cut,logFC_cut), color = "gray",size=0.4) +  geom_hline(yintercept= vcat, color = "gray",size=0.4)
-
-  }
-
-  return(list(Plot=ppp3,feature=paste(comparison,"_",as.character(Data$selectedData$Marker_List),sep="")))
+    return(list(Plot=ppp3,feature=paste(comparison,"_",as.character(Data$selectedData$Marker_List),sep="")))
 }
-
 
 
 #' Generates the MA plot
@@ -1687,114 +1782,118 @@ Volcano<-function(Data,de.comparison,logFC_cut,FDR_cut,show.more,dot.size,intera
 #'
 MA<-function(Data,de.comparison,logFC_cut,FDR_cut,show.more,dot.size,interactive){
 
-  qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
-  col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
+    qual_col_pals = brewer.pal.info[brewer.pal.info$category == 'qual',]
+    col_vector = unlist(mapply(brewer.pal, qual_col_pals$maxcolors, rownames(qual_col_pals)))
 
-  de.comparison<-as.expression(parse(text=de.comparison))
-  plotData<-DEplot_entries(deData=Data$DEstats,filters=de.comparison)
-  comparison<-rbind(plotData[[2]]$FactorFilters,plotData[[2]]$NumericFilters)
-  comparison<-paste(apply(comparison,1,paste,collapse=":"),collapse=" & ")
+    de.comparison<-as.expression(parse(text=de.comparison))
+    plotData<-DEplot_entries(deData=Data$DEstats,filters=de.comparison)
+    comparison<-rbind(plotData[[2]]$FactorFilters,plotData[[2]]$NumericFilters)
+    comparison<-paste(apply(comparison,1,paste,collapse=":"),collapse=" & ")
 
-  ppp4<-c()
-  plotData<-plotData[[1]]
-  signf<-rep("Non-DE",nrow(plotData))
-  signf[abs(as.numeric(as.character(plotData$logFC)))>=logFC_cut & as.numeric(as.character(plotData$FDR))<=FDR_cut]<-"DE"
-  sel<-rep(" ",nrow(plotData))
-  x<-as.character(plotData[,1])
-  x<-cbind(x,GeneNames(x,what="Other"),GeneNames(x,what="Name"))
+    ppp4<-c()
+    plotData<-plotData[[1]]
+    signf<-rep("Non-DE",nrow(plotData))
+    signf[abs(as.numeric(as.character(plotData$logFC)))>=logFC_cut & as.numeric(as.character(plotData$FDR))<=FDR_cut]<-"DE"
+    sel<-rep(" ",nrow(plotData))
+    x<-as.character(plotData[,1])
+    x<-cbind(x,GeneNames(x,what="Other"),GeneNames(x,what="Name"))
 
-  if(show.more){
-    gg<-match(Data$filteredData$Marker_List,as.character(plotData[,1]))
-    gg<-plotData[gg,]
-    gg<-gg[sort.list(gg$PValue),]
-    gg<-unique(c(as.character(gg[1:min(70,nrow(gg)),1]),Data$selectedData$Marker_List))
-    mm<-findGeneType(templ=x,genes=gg,multiple=FALSE)
-    for(i in 1:length(mm)){
-      signf[mm[i]]<-paste("Marker: ",GeneNames(gg[i],what="Name"),sep="")
+    if(show.more){
+        gg<-match(Data$filteredData$Marker_List,as.character(plotData[,1]))
+        gg<-plotData[gg,]
+        gg<-gg[sort.list(gg$PValue),]
+        gg<-unique(c(as.character(gg[1:min(70,nrow(gg)),1]),Data$selectedData$Marker_List))
+        mm<-findGeneType(templ=x,genes=gg,multiple=FALSE)
+        for(i in 1:length(mm)){
+            signf[mm[i]]<-paste("Marker: ",GeneNames(gg[i],what="Name"),sep="")
+        }
+    } else {
+        mm<-findGeneType(templ=x,genes=Data$selectedData$Marker_List,multiple=FALSE)
+        signf[mm]<-paste("Marker: ",GeneNames(Data$selectedData$Marker_List,what="Name"),sep="")
     }
-  } else {
-    mm<-findGeneType(templ=x,genes=Data$selectedData$Marker_List,multiple=FALSE)
-    signf[mm]<-paste("Marker: ",GeneNames(Data$selectedData$Marker_List,what="Name"),sep="")
-  }
-  sel[mm]<-"Selected"
-  plotData<-cbind(plotData,Type=signf,Selected=sel)
+    sel[mm]<-"Selected"
+    plotData<-cbind(plotData,Type=signf,Selected=sel)
 
-  cols<-rep("#8ca0ca",nrow(plotData))
-  cols[plotData$Type=="DE"]<-"#64ba9f"
-  cols[plotData$Selected=="Selected"]<-col_vector[1:as.numeric(table(plotData$Selected)[2])]
-  sh<-rep("circle",nrow(plotData))
-  sh[plotData$Selected!=" "]<-"triangle"
-  plotData<-cbind(plotData,Colors=cols,Shapes=sh)
+    cols<-rep("#8ca0ca",nrow(plotData))
+    cols[plotData$Type=="DE"]<-"#64ba9f"
+    cols[plotData$Selected=="Selected"]<-col_vector[1:as.numeric(table(plotData$Selected)[2])]
+    sh<-rep("circle",nrow(plotData))
+    sh[plotData$Selected!=" "]<-"triangle"
+    plotData<-cbind(plotData,Colors=cols,Shapes=sh)
 
-  selData<-plotData[plotData$Selected=="Selected",]
-  selData<-selData[sort.list(selData$Type),]
-  uu<-cbind(as.character(selData$Type),sort(as.character(selData$Colors)))
+    selData<-plotData[plotData$Selected=="Selected",]
+    selData<-selData[sort.list(selData$Type),]
+    uu<-cbind(as.character(selData$Type),sort(as.character(selData$Colors)))
 
-  complegend<-unlist(strsplit(comparison,":",fixed=T))
-  complegend1<-paste(complegend[2:length(complegend)],collapse=": ")
-  complegend2<-unlist(strsplit(complegend[length(complegend)],"[: -]"))
-  complegend2<-complegend2[(length(complegend2)-1):length(complegend2)]
-  if(interactive){
-    ppp4<-plot_ly(type="scatter",mode="markers") %>%
-      layout(title=complegend1,
-             xaxis=list(title=paste("log Average <br> <br> logFC > 0 (logFC < 0) values indicate increased target expression in ",complegend2[1]," (",complegend2[2],")",sep="")),
-             yaxis=list(title="logFC"))
+    complegend<-unlist(strsplit(comparison,":",fixed=T))
+    complegend1<-paste(complegend[2:length(complegend)],collapse=": ")
+    complegend2<-unlist(strsplit(complegend[length(complegend)],"[: -]"))
+    complegend2<-complegend2[(length(complegend2)-1):length(complegend2)]
 
-    ppp4<-ppp4 %>% add_trace(name="Non-DE",
-                             x=as.numeric(as.character(plotData$logCPM))[plotData$Selected==" " & plotData$Type=="Non-DE"],
-                             y=as.numeric(as.character(plotData$logFC))[plotData$Selected==" " & plotData$Type=="Non-DE"],
-                             marker=list(color="#82c4c3"),
-                             text = as.character(plotData[plotData$Selected==" " & plotData$Type=="Non-DE",1]))
+    if(interactive){
+        ppp4<-plot_ly(type="scatter",mode="markers") %>%
+        layout(title=list(text=paste("MA plot of <b>",complegend1,"</b> cells",sep=""),font=list(color="black",size=22),x=0.03,y=0.997),
+            xaxis=list(title=paste("<b>log Average</b> <br> <br> (<i>log FC > 0 [log FC < 0] values indicate increased target expression in ",complegend2[1]," [",complegend2[2],"] cells</i>)",sep="")),
+            yaxis=list(title="<b>log FC</b>"))
 
-    ppp4<-ppp4 %>% add_trace(name="DE",mode = 'text',textfont = list(color = 'transparent'),
-                             x=as.numeric(as.character(plotData$logCPM))[plotData$Selected==" " & plotData$Type=="DE"],
-                             y=as.numeric(as.character(plotData$logFC))[plotData$Selected==" " & plotData$Type=="DE"],
-                             marker=list(color="#fc8210"),
-                             text=as.character(plotData[plotData$Selected==" " & plotData$Type=="DE",1]))
+        ppp4<-ppp4 %>% add_trace(name="Non-DE",
+                x=as.numeric(as.character(plotData$logCPM))[plotData$Selected==" " & plotData$Type=="Non-DE"],
+                y=as.numeric(as.character(plotData$logFC))[plotData$Selected==" " & plotData$Type=="Non-DE"],
+                marker=list(color="#82c4c3"),
+                text = as.character(plotData[plotData$Selected==" " & plotData$Type=="Non-DE",1]))
 
-    ppp4<-ppp4 %>% add_trace(name=uu[,1],mode = 'text',textfont = list(color = 'transparent'),
-                             x=as.numeric(as.character(selData$logCPM)),
-                             y=as.numeric(as.character(selData$logFC)),
-                             marker=list(color="#6a097d",size=(dot.size*4)),
-                             symbol=selData$Selected,
-                             text = paste("<a href='https://www.ncbi.nlm.nih.gov/gene/?term=",GeneNames(uu[,1],what="Name"),"'>",uu[,1],"</a>",sep="")) %>%
-      add_lines(x = c(min(as.numeric(as.character(plotData$logCPM))), max(as.numeric(as.character(plotData$logCPM)))), y = c(logFC_cut, logFC_cut),color=I("gray"),size=I(1),showlegend=F) %>%
-      add_lines(x = c(min(as.numeric(as.character(plotData$logCPM))), max(as.numeric(as.character(plotData$logCPM)))), y = c(-logFC_cut, -logFC_cut),color=I("gray"),size=I(1),showlegend=F)
+        ppp4<-ppp4 %>% add_trace(name="DE",mode = 'text',textfont = list(color = 'transparent'),
+                x=as.numeric(as.character(plotData$logCPM))[plotData$Selected==" " & plotData$Type=="DE"],
+                y=as.numeric(as.character(plotData$logFC))[plotData$Selected==" " & plotData$Type=="DE"],
+                marker=list(color="#fc8210"),
+                text=as.character(plotData[plotData$Selected==" " & plotData$Type=="DE",1]))
 
-  } else {
+        te<-"Non-significant"
+        if(abs(as.numeric(as.character(selData$logFC)))>=logFC_cut & as.numeric(as.character(selData$FDR))<=FDR_cut){
+            te<-"Significant"
+        }
+        ppp4<-ppp4 %>% add_trace(name=uu[,1],mode = 'text',textfont = list(color = 'transparent'),
+                x=as.numeric(as.character(selData$logCPM)),
+                y=as.numeric(as.character(selData$logFC)),
+                marker=list(color="#6a097d",size=(dot.size*4)),
+                symbol=selData$Selected,
+                text = paste("<a href='https://www.ncbi.nlm.nih.gov/gene/?term=",GeneNames(uu[,1],what="Name"),"'>",uu[,1],"</a> (",te,")",sep="")) %>%
+                    add_lines(x = c(min(as.numeric(as.character(plotData$logCPM))), max(as.numeric(as.character(plotData$logCPM)))), y = c(logFC_cut, logFC_cut),color=I("gray"),size=I(1),showlegend=F) %>%
+                    add_lines(x = c(min(as.numeric(as.character(plotData$logCPM))), max(as.numeric(as.character(plotData$logCPM)))), y = c(-logFC_cut, -logFC_cut),color=I("gray"),size=I(1),showlegend=F)
 
-    if(length(which(names(table(signf))=="DE"))==0){
-      uu<-rbind(uu,cbind(matrix("Non-DE",ncol=1),matrix("#8ca0ca",ncol=1)))
-    }
-    if(length(which(names(table(signf))=="Non-DE"))==0){
-      uu<-rbind(uu,cbind(matrix("DE",ncol=1),matrix("#64ba9f",ncol=1)))
-    }
-    if(length(which(names(table(signf))=="DE"))>0 & length(which(names(table(signf))=="Non-DE"))>0){
-      uu<-rbind(uu,cbind(matrix(c("DE","Non-DE"),ncol=1),matrix(c("#64ba9f","#8ca0ca"),ncol=1)))
-    }
-    uu<-uu[sort.list(uu[,1]),]
+         } else {
 
-    ppp4<-ggplot(plotData,aes(
-      x=as.numeric(as.character(logCPM)),
-      y=as.numeric(as.character(logFC)),
-      color=Type)) +
-      geom_point(size=(dot.size/10)) +
-      scale_color_manual(breaks=as.character(uu[,1]),values=as.character(uu[,2])) +
-      xlim(range(as.numeric(as.character(plotData$logCPM)))) +
-      ylim(range(as.numeric(as.character(plotData$logFC)))) +
-      labs(x="log Average",y="logFC",title=comparison) +
-      theme_light() +
-      geom_vline(xintercept=0,size=0.2)
-    ppp4<-ppp4+geom_point(data=selData,aes(x=as.numeric(as.character(logCPM)),y=as.numeric(as.character(logFC))),size=((dot.size/10)*4),shape="triangle") +
-      scale_fill_manual(breaks=uu[,1],values=as.character(uu[,2]))
-    ppp4<-ppp4 +  geom_hline(yintercept=c(-logFC_cut,logFC_cut), color = "gray",size=0.4)
+             if(length(which(names(table(signf))=="DE"))==0){
+                 uu<-rbind(uu,cbind(matrix("Non-DE",ncol=1),matrix("#8ca0ca",ncol=1)))
+             }
+             if(length(which(names(table(signf))=="Non-DE"))==0){
+                 uu<-rbind(uu,cbind(matrix("DE",ncol=1),matrix("#64ba9f",ncol=1)))
+             }
+             if(length(which(names(table(signf))=="DE"))>0 & length(which(names(table(signf))=="Non-DE"))>0){
+                 uu<-rbind(uu,cbind(matrix(c("DE","Non-DE"),ncol=1),matrix(c("#64ba9f","#8ca0ca"),ncol=1)))
+             }
+             uu<-uu[sort.list(uu[,1]),]
 
-  }
+             ppp4<-ggplot(plotData,aes(
+                 x=as.numeric(as.character(logCPM)),
+                 y=as.numeric(as.character(logFC)),
+                 color=Type)) +
+                 geom_point(size=(dot.size/10)) +
+                 scale_color_manual(breaks=as.character(uu[,1]),values=as.character(uu[,2])) +
+                 xlim(range(as.numeric(as.character(plotData$logCPM)))) +
+                 ylim(range(as.numeric(as.character(plotData$logFC)))) +
+                 labs(x="log Average",y="logFC",title=comparison) +
+                 theme_light() +
+                 geom_vline(xintercept=0,size=0.2)
+             ppp4<-ppp4+geom_point(data=selData,aes(x=as.numeric(as.character(logCPM)),y=as.numeric(as.character(logFC))),size=((dot.size/10)*4),shape="triangle") +
+                scale_fill_manual(breaks=uu[,1],values=as.character(uu[,2]))
+                ppp4<-ppp4 +  geom_hline(yintercept=c(-logFC_cut,logFC_cut), color = "gray",size=0.4)
+
+         }
 
 
-  return(list(Plot=ppp4,feature=paste(comparison,"_",as.character(Data$selectedData$Marker_List),sep="")))
+         return(list(Plot=ppp4,feature=paste(comparison,"_",as.character(Data$selectedData$Marker_List),sep="")))
 }
-
 
 
 
@@ -1878,6 +1977,7 @@ plotSaver<-function(myplot,type,output_folder,interactive,show.it,save.it,setDat
                 dir.create(paste(output_folder,"InteractivePlots",sep=""))
             }
         }
+
         if(!interactive & save.it){
             if(!dir.exists(paste(output_folder,"NonInteractivePlots",sep=""))){
                 dir.create(paste(output_folder,"NonInteractivePlots",sep=""))

@@ -1,8 +1,8 @@
 Package: nMyo
 Type: Package
 Title: nMyo
-Version: 1.0.6
-Date: 2020-05-20
+Version: 1.0.8
+Date: 2020-06-01
 Authors@R: c(person("Efthymios", "Motakis", email= "", role = c("aut")), 
     person("Diana", "Low",  email = "lowdiana@gmail.com", role = c("cre")))
 Maintainer: Diana LOW <lowdiana@gmail.com>

@@ -23,9 +23,15 @@ MarkerQuery<-function(Data,marker){
     sel$Design<-sel$Design[,-match(cc,colnames(Data$filteredData$Design))]
 
     # pick the gene of interest
-    mm<-findGeneType(templ=sel$Annotation,genes=marker,multiple=FALSE)
+    mm<-findGeneType(templ=sel$Annotation,genes=marker,correction=TRUE,multiple=FALSE)
     reportIt<-0
     if(mm[1]==0){
+        if(length(grep("ENSMUSG",marker))==0){
+            s <- strsplit(tolower(marker), " ")[[1]]
+            marker<-paste(toupper(substring(s, 1,1)), substring(s, 2),sep="", collapse=" ")
+        } else {
+            marker<-unlist(strsplit(toupper(marker),":"))[1]
+        }
         mm<-grep(marker,as.character(sel$Annotation[,1]))
         reportIt<-1
     }
@@ -74,3 +80,4 @@ MarkerQuery<-function(Data,marker){
     res<-c(Data,list(selectedData=sel))
   return(res)
 }
+

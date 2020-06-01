@@ -7,7 +7,7 @@
 RequiredDataReader(data_file)
 }
 \arguments{
-\item{data_file}{character. The location of the RDS data file containing the normalised and corrected counts (CorrCounts), the design table (DesignTable) and the differential expressin analysis (DEs).}
+\item{data_file}{character. The data file containing the normalised and corrected counts (CorrCounts), the design table (DesignTable) and the differential expressin analysis (DEs).}
 }
 \value{
 A list of data
