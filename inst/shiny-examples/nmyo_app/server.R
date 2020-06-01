@@ -66,12 +66,23 @@ shinyServer(function(input, output,session) {
           value = 0,
           {
             shiny::incProgress(1/5)
-            thedir=dirname(system.file("data", package = "nMyo"))
-            fs = list.files(thedir, full.names = TRUE)
+            currdir=getwd()
+            tmpdl <- paste0(currdir,"/tmpdl/")
+            if (!file.exists(tmpdl)){
+              dir.create(tmpdl)
+            }
+            setwd(tmpdl)
+            shiny::incProgress(1/5)
+            write.csv(nMyo_Data$CorrCounts, "CorrCounts.csv", row.names = FALSE)
+            write.csv(nMyo_Data$DesignTable, "DesignTable.csv", row.names = FALSE)
+            write.csv(nMyo_Data$DEs, "DEs.csv", row.names = FALSE)
             shiny::incProgress(2/5)
+            fs = list.files(".", full.names = TRUE)
             zip(zipfile=fname, files=fs)
             shiny::incProgress(1/5)
             if(file.exists(paste0(fname, ".zip"))) {file.rename(paste0(fname, ".zip"), fname)}
+            setwd(currdir)
+            unlink(tmpdl, recursive = TRUE)
           }
         )
       })
@@ -124,7 +135,7 @@ shinyServer(function(input, output,session) {
            "t-SNE"={
 
              if(input$scatterCheckbox==TRUE){
-               scattercheck="Condition"
+               scattercheck="CellType:Condition"
              } else {
                scattercheck="CellType"
              }

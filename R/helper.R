@@ -574,10 +574,9 @@ filterSampleDEstatsData<-function(Data){
 #'
 DateStamp<-function(date){
   setDate<-unlist(strsplit(date," ",fixed=T))
-  setDate<-setDate[c(1,2,3,5,4)]
-  setDate[5]<-chartr(old = ":", new = ".", setDate[5])
-  setDate<-paste(setDate,collapse="_")
- return(setDate)
+  setDate<-paste(setDate,collapse="")
+  setDate<-gsub(pattern=":",replacement="",setDate)
+  return(setDate)
 }
 
 
